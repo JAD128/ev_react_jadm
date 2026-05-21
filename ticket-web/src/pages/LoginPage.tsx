@@ -23,7 +23,7 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
             const res = await authApi.login({ username, password });
             login(res.token, res.username);
             onSuccess(); // navega a la app
-        } catch (e) {
+        } catch {
             setError("Credenciales inválidas. Intenta de nuevo.");
         } finally {
             setLoading(false);

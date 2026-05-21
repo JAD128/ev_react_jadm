@@ -1,5 +1,6 @@
 // src/context/AuthContext.tsx
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState } from "react";
+import type { ReactNode } from "react";
 type AuthUser = { token: string; username: string } | null;
 type AuthContextType = {
     user: AuthUser;
@@ -12,6 +13,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<AuthUser>(() => {
         const token = localStorage.getItem("token");
         const username = localStorage.getItem("username");
+        if (!token || token === "undefined" || token === "null" || !username) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("username");
+            return null;
+        }
         return token && username ? { token, username } : null;
     });
     function login(token: string, username: string) {

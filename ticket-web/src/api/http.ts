@@ -1,7 +1,20 @@
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+
+function getValidToken() {
+    const token = localStorage.getItem("token");
+
+    if (!token || token === "undefined" || token === "null") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        return null;
+    }
+
+    return token;
+}
+
 export async function http<T>(path: string, options?: RequestInit): Promise<T> {
     // Lee el token guardado
-    const token = localStorage.getItem("token");
+    const token = getValidToken();
     const res = await fetch(`${API_URL}${path}`, {
         headers: {
             "Content-Type": "application/json",

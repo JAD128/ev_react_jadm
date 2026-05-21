@@ -9,6 +9,7 @@ type ApiResponse<T> = {
 export type AuthResponse = {
     token: string;
     username: string;
+    role: "ADMIN" | "TECNICO" | "USUARIO";
 };
 export type LoginDto = {
     username: string;

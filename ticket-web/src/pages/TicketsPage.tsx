@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import type { TicketPriority, TicketStatus } from "../api/tickets";
-import { useTickets } from "../api/tickets.queries";
+import { useAssignTicket, useCreateTicket, useTickets } from "../api/tickets.queries";
+import { useCategories } from "../api/categories.queries";
+import { useAssignableUsers } from "../api/users.queries";
 
 const statusOptions: TicketStatus[] = [
     "ABIERTO",
@@ -32,9 +35,16 @@ function formatDate(value: string) {
 
 export default function TicketsPage() {
     const { user, logout } = useAuth();
+    const isAdmin = user?.role === "ADMIN";
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
     const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "">("");
+    const [titulo, setTitulo] = useState("");
+    const [descripcion, setDescripcion] = useState("");
+    const [prioridad, setPrioridad] = useState<TicketPriority>("MEDIA");
+    const [categoriaId, setCategoriaId] = useState("");
+    const [formError, setFormError] = useState<string | null>(null);
+    const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
     const {
         data: tickets = [],
@@ -43,6 +53,20 @@ export default function TicketsPage() {
         error,
         refetch,
     } = useTickets();
+
+    const {
+        data: categories = [],
+        isLoading: categoriesLoading,
+        isError: categoriesError,
+    } = useCategories();
+
+    const createTicket = useCreateTicket();
+    const assignTicket = useAssignTicket();
+    const {
+        data: assignableUsers = [],
+        isLoading: assignableUsersLoading,
+        isError: assignableUsersError,
+    } = useAssignableUsers(isAdmin);
 
     const filteredTickets = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -61,6 +85,57 @@ export default function TicketsPage() {
             return matchesSearch && matchesStatus && matchesPriority;
         });
     }, [tickets, search, statusFilter, priorityFilter]);
+
+    async function handleCreateTicket(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setFormError(null);
+        setFormSuccess(null);
+
+        if (!titulo.trim()) {
+            setFormError("El titulo es obligatorio.");
+            return;
+        }
+
+        if (!descripcion.trim()) {
+            setFormError("La descripcion es obligatoria.");
+            return;
+        }
+
+        if (!categoriaId) {
+            setFormError("Selecciona una categoria.");
+            return;
+        }
+
+        try {
+            await createTicket.mutateAsync({
+                titulo: titulo.trim(),
+                descripcion: descripcion.trim(),
+                prioridad,
+                categoriaId: Number(categoriaId),
+            });
+
+            setTitulo("");
+            setDescripcion("");
+            setPrioridad("MEDIA");
+            setCategoriaId("");
+            setFormSuccess("Ticket creado correctamente.");
+        } catch (err) {
+            setFormError(err instanceof Error ? err.message : "No se pudo crear el ticket.");
+        }
+    }
+
+    async function handleAssignTicket(ticketId: number, tecnicoId: string) {
+        if (!tecnicoId) return;
+
+        try {
+            await assignTicket.mutateAsync({
+                ticketId,
+                dto: { tecnicoId: Number(tecnicoId) },
+            });
+        } catch {
+            // La tabla mostrara el error de red si la recarga falla.
+        }
+    }
 
     return (
         <div className="min-h-screen bg-slate-100">
@@ -81,6 +156,96 @@ export default function TicketsPage() {
             </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6">
+                <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-slate-900">Crear ticket</h2>
+                    </div>
+
+                    {formError && (
+                        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                            {formError}
+                        </div>
+                    )}
+
+                    {formSuccess && (
+                        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                            {formSuccess}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleCreateTicket} className="grid gap-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Titulo</label>
+                                <input
+                                    type="text"
+                                    value={titulo}
+                                    onChange={e => setTitulo(e.target.value)}
+                                    maxLength={150}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Prioridad</label>
+                                <select
+                                    value={prioridad}
+                                    onChange={e => setPrioridad(e.target.value as TicketPriority)}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                >
+                                    {priorityOptions.map(priority => (
+                                        <option key={priority} value={priority}>
+                                            {formatLabel(priority)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">Descripcion</label>
+                            <textarea
+                                value={descripcion}
+                                onChange={e => setDescripcion(e.target.value)}
+                                rows={4}
+                                className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            />
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+                                <select
+                                    value={categoriaId}
+                                    onChange={e => setCategoriaId(e.target.value)}
+                                    disabled={categoriesLoading || categoriesError}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                                >
+                                    <option value="">
+                                        {categoriesLoading ? "Cargando categorias..." : "Selecciona una categoria"}
+                                    </option>
+                                    {categories.map(category => (
+                                        <option key={category.id} value={category.id}>
+                                            {category.nombre}
+                                        </option>
+                                    ))}
+                                </select>
+                                {categoriesError && (
+                                    <p className="mt-1 text-xs text-red-600">No se pudieron cargar las categorias.</p>
+                                )}
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={createTicket.isPending || categoriesLoading}
+                                className="self-end rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {createTicket.isPending ? "Creando..." : "Crear ticket"}
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
                 <section className="mb-5 grid gap-3 md:grid-cols-[1fr_180px_180px_auto]">
                     <input
                         type="search"
@@ -173,9 +338,29 @@ export default function TicketsPage() {
                                                 {ticket.categoriaNombre ?? "Sin categoria"}
                                             </td>
                                             <td className="px-4 py-3 text-slate-700">
-                                                {ticket.asignadoANombreCompleto ??
+                                                {isAdmin ? (
+                                                    <select
+                                                        value={ticket.asignadoAId ?? ""}
+                                                        onChange={e => handleAssignTicket(ticket.id, e.target.value)}
+                                                        disabled={
+                                                            assignTicket.isPending ||
+                                                            assignableUsersLoading ||
+                                                            assignableUsersError
+                                                        }
+                                                        className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                                                    >
+                                                        <option value="">Sin asignar</option>
+                                                        {assignableUsers.map(assignableUser => (
+                                                            <option key={assignableUser.id} value={assignableUser.id}>
+                                                                {assignableUser.nombre} {assignableUser.apellido}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    ticket.asignadoANombreCompleto ??
                                                     ticket.asignadoAUsername ??
-                                                    "Sin asignar"}
+                                                    "Sin asignar"
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-slate-700">{formatDate(ticket.createdAt)}</td>
                                         </tr>
@@ -208,9 +393,29 @@ export default function TicketsPage() {
                                         <div>
                                             <dt className="text-xs font-medium uppercase text-slate-500">Asignado</dt>
                                             <dd className="text-slate-800">
-                                                {ticket.asignadoANombreCompleto ??
+                                                {isAdmin ? (
+                                                    <select
+                                                        value={ticket.asignadoAId ?? ""}
+                                                        onChange={e => handleAssignTicket(ticket.id, e.target.value)}
+                                                        disabled={
+                                                            assignTicket.isPending ||
+                                                            assignableUsersLoading ||
+                                                            assignableUsersError
+                                                        }
+                                                        className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                                                    >
+                                                        <option value="">Sin asignar</option>
+                                                        {assignableUsers.map(assignableUser => (
+                                                            <option key={assignableUser.id} value={assignableUser.id}>
+                                                                {assignableUser.nombre} {assignableUser.apellido}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    ticket.asignadoANombreCompleto ??
                                                     ticket.asignadoAUsername ??
-                                                    "Sin asignar"}
+                                                    "Sin asignar"
+                                                )}
                                             </dd>
                                         </div>
                                         <div className="col-span-2">

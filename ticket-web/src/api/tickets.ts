@@ -40,6 +40,10 @@ export type CreateTicketDto = {
     categoriaId: number | null;
 };
 
+export type AssignTicketDto = {
+    tecnicoId: number;
+};
+
 export const ticketsApi = {
     findAll: async () => {
         const res = await http<ApiResponse<Ticket[]>>("/api/tickets");
@@ -48,6 +52,13 @@ export const ticketsApi = {
     create: async (dto: CreateTicketDto) => {
         const res = await http<ApiResponse<Ticket>>("/api/tickets", {
             method: "POST",
+            body: JSON.stringify(dto),
+        });
+        return res.data;
+    },
+    assign: async (ticketId: number, dto: AssignTicketDto) => {
+        const res = await http<ApiResponse<Ticket>>(`/api/tickets/${ticketId}/asignar`, {
+            method: "PATCH",
             body: JSON.stringify(dto),
         });
         return res.data;

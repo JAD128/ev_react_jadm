@@ -32,8 +32,17 @@ export async function http<T>(path: string, options?: RequestInit): Promise<T> {
         throw new Error("Sesión expirada");
     }
     if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `HTTP ${res.status}`);
+        const text = await res.text();
+        let message = text;
+
+        try {
+            const body = JSON.parse(text) as { message?: string };
+            message = body.message ?? text;
+        } catch {
+            message = text;
+        }
+
+        throw new Error(message || `HTTP ${res.status}`);
     }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
